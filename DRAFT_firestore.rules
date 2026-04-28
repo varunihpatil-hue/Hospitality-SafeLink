@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role check: Fetches from /users/{uid}
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function hasRole(role) {
+      return isEmailVerified() && getRole() == role;
+    }
+
+    function isStaff() { return hasRole('staff'); }
+    function isSecurity() { return hasRole('security'); }
+    function isManager() { return hasRole('manager'); }
+    function isAuthorized() { return isStaff() || isSecurity() || isManager(); }
+
+    // --- Validations ---
+
+    function isValidUser(data) {
+      return data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.role in ['staff', 'security', 'manager']
+        && data.keys().hasAll(['uid', 'email', 'role', 'lastSeen'])
+        && data.keys().size() <= 6;
+    }
+
+    function isValidIncident(data) {
+      return data.reporterUid == request.auth.uid
+        && data.type in ['fire', 'medical', 'security', 'other']
+        && data.status in ['active', 'resolved']
+        && data.description is string && data.description.size() <= 2000
+        && data.location.lat is number && data.location.lng is number
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    function isValidMessage(data) {
+      return data.senderUid == request.auth.uid
+        && data.text is string && data.text.size() <= 1000
+        && data.createdAt == request.time;
+    }
+
+    // --- Collections ---
+
+    match /users/{userId} {
+      allow get: if isAuthorized();
+      allow list: if isManager() || isSecurity();
+      
+      allow create: if isEmailVerified() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
+      
+      allow update: if isEmailVerified() && userId == request.auth.uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastSeen', 'displayName', 'location'])
+        && incoming().lastSeen == request.time;
+    }
+
+    match /incidents/{incidentId} {
+      allow get: if isAuthorized();
+      allow list: if isAuthorized(); // Security/Managers need this for dashboard, Staff for awareness?
+      
+      allow create: if isAuthorized() && isValidId(incidentId) && isValidIncident(incoming());
+      
+      allow update: if isEmailVerified() && (
+        // Manager/Security can resolve
+        ((isManager() || isSecurity()) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt', 'aiSummary']) && incoming().updatedAt == request.time)
+        ||
+        // Reporter can update description (only if active)
+        (existing().status == 'active' && existing().reporterUid == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['description', 'updatedAt', 'location']) && incoming().updatedAt == request.time)
+      );
+    }
+
+    match /incidents/{incidentId}/messages/{messageId} {
+      allow list, get: if isAuthorized();
+      
+      allow create: if isAuthorized() && isValidId(messageId) && isValidMessage(incoming())
+        && get(/databases/$(database)/documents/incidents/$(incidentId)).data.status == 'active';
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Remix: Hospitality SafeLink",
+  "description": "Accelerated emergency response and real-time crisis coordination for hospitality staff and security teams.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": []
+}

@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Hospitality staff or security personnel profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["staff", "security", "manager", "guest"] },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Incident": {
+      "title": "Incident",
+      "description": "An active or resolved emergency crisis",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterUid": { "type": "string" },
+        "type": { "type": "string", "enum": ["fire", "medical", "security", "other"] },
+        "status": { "type": "string", "enum": ["active", "resolved"] },
+        "description": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          }
+        },
+        "photoUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "aiSummary": { "type": "string" }
+      },
+      "required": ["reporterUid", "type", "status", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Communication during an incident",
+      "type": "object",
+      "properties": {
+        "incidentId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["incidentId", "senderUid", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/incidents/{incidentId}": {
+      "schema": "Incident",
+      "description": "Crisis incidents"
+    },
+    "/incidents/{incidentId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Real-time communication for an incident"
+    }
+  }
+}
